@@ -1,0 +1,242 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidDomainProfile(profile) {
+      return profile in ['manufacturing', 'logistics', 'automotive', 'electronics', 'infrastructure'];
+    }
+
+    function isValidTolerance(tolerance) {
+      return tolerance in ['strict', 'standard', 'triage'];
+    }
+
+    function isValidVerdict(verdict) {
+      return verdict in ['PASS', 'CONDITIONAL', 'FAIL'];
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 100
+        && data.role == 'inspector'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInspectionRecord(data) {
+      return data.keys().hasAll([
+          'ownerId', 'batchId', 'assetLabel', 'domainProfile', 'toleranceStandard',
+          'verdict', 'aiVerdict', 'qualityScore', 'surfaceCondition', 'structuralIntegrity',
+          'recommendedAction', 'summary', 'inspectorNotes', 'defectCount', 'criticalCount',
+          'defectsSummary', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'batchId', 'assetLabel', 'domainProfile', 'toleranceStandard',
+          'verdict', 'aiVerdict', 'qualityScore', 'surfaceCondition', 'structuralIntegrity',
+          'recommendedAction', 'summary', 'inspectorNotes', 'defectCount', 'criticalCount',
+          'defectsSummary', 'status', 'thumbnailDataUrl', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.batchId is string && data.batchId.size() >= 1 && data.batchId.size() <= 64
+        && data.assetLabel is string && data.assetLabel.size() >= 1 && data.assetLabel.size() <= 120
+        && isValidDomainProfile(data.domainProfile)
+        && isValidTolerance(data.toleranceStandard)
+        && isValidVerdict(data.verdict)
+        && isValidVerdict(data.aiVerdict)
+        && (data.qualityScore is int || data.qualityScore is float)
+        && data.qualityScore >= 0 && data.qualityScore <= 100
+        && data.surfaceCondition is string && data.surfaceCondition.size() >= 1 && data.surfaceCondition.size() <= 64
+        && data.structuralIntegrity is string && data.structuralIntegrity.size() >= 1 && data.structuralIntegrity.size() <= 64
+        && data.recommendedAction is string && data.recommendedAction.size() >= 1 && data.recommendedAction.size() <= 120
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 1000
+        && data.inspectorNotes is string && data.inspectorNotes.size() <= 1000
+        && data.defectCount is int && data.defectCount >= 0 && data.defectCount <= 50
+        && data.criticalCount is int && data.criticalCount >= 0 && data.criticalCount <= 50
+        && data.defectsSummary is list
+        && data.defectsSummary.size() <= 15
+        && (data.defectsSummary.size() == 0 || (data.defectsSummary[0] is string && data.defectsSummary[0].size() <= 240))
+        && data.status in ['open', 'reviewed', 'archived']
+        && (!('thumbnailDataUrl' in data) || (data.thumbnailDataUrl is string && data.thumbnailDataUrl.size() <= 200000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDefectFinding(data, inspectionId) {
+      return data.keys().hasAll([
+          'ownerId', 'inspectionId', 'defectType', 'severity', 'confidence',
+          'locationDescription', 'remediation', 'ymin', 'xmin', 'ymax', 'xmax', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'inspectionId', 'defectType', 'severity', 'confidence',
+          'locationDescription', 'remediation', 'ymin', 'xmin', 'ymax', 'xmax', 'createdAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && isValidId(data.inspectionId)
+        && data.inspectionId == inspectionId
+        && data.defectType is string && data.defectType.size() >= 1 && data.defectType.size() <= 80
+        && data.severity in ['CRITICAL', 'MAJOR', 'MINOR']
+        && (data.confidence is int || data.confidence is float)
+        && data.confidence >= 0 && data.confidence <= 1
+        && data.locationDescription is string && data.locationDescription.size() >= 1 && data.locationDescription.size() <= 240
+        && data.remediation is string && data.remediation.size() >= 1 && data.remediation.size() <= 400
+        && data.ymin is int && data.ymin >= 0 && data.ymin <= 1000
+        && data.xmin is int && data.xmin >= 0 && data.xmin <= 1000
+        && data.ymax is int && data.ymax >= 0 && data.ymax <= 1000
+        && data.xmax is int && data.xmax >= 0 && data.xmax <= 1000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidInspectionStandard(data) {
+      return data.keys().hasAll([
+          'ownerId', 'name', 'domainProfile', 'toleranceStandard', 'passThreshold',
+          'defectFocus', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'name', 'domainProfile', 'toleranceStandard', 'passThreshold',
+          'defectFocus', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && isValidDomainProfile(data.domainProfile)
+        && isValidTolerance(data.toleranceStandard)
+        && data.passThreshold is int && data.passThreshold >= 0 && data.passThreshold <= 100
+        && data.defectFocus is string && data.defectFocus.size() >= 1 && data.defectFocus.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Inspections collection
+    match /inspections/{inspectionId} {
+      allow get: if isValidId(inspectionId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(inspectionId)
+        && isValidInspectionRecord(incoming())
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(inspectionId)
+        && isOwner(existing().ownerId)
+        && existing().status != 'archived'
+        && isValidInspectionRecord(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().aiVerdict == existing().aiVerdict
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: QA Review / Sign-off Override
+          (incoming().diff(existing()).affectedKeys().hasOnly(['verdict', 'inspectorNotes', 'status', 'updatedAt'])
+            && incoming().status in ['open', 'reviewed', 'archived']) ||
+          // Action: Archive Inspection
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && incoming().status == 'archived')
+        );
+      allow delete: if isVerifiedUser() && isValidId(inspectionId) && isOwner(existing().ownerId);
+
+      // Subcollection: Localized defect findings (Master Gate + Atomicity)
+      match /findings/{findingId} {
+        allow get: if isValidId(inspectionId) && isValidId(findingId)
+          && isSignedIn()
+          && get(/databases/$(database)/documents/inspections/$(inspectionId)).data.ownerId == request.auth.uid;
+        allow list: if isSignedIn()
+          && existing().ownerId == request.auth.uid
+          && existing().inspectionId == inspectionId;
+        allow create: if isVerifiedUser()
+          && isValidId(inspectionId)
+          && isValidId(findingId)
+          && isValidDefectFinding(incoming(), inspectionId)
+          && incoming().createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/inspections/$(inspectionId))
+          && getAfter(/databases/$(database)/documents/inspections/$(inspectionId)).data.ownerId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isVerifiedUser()
+          && isValidId(inspectionId)
+          && isValidId(findingId)
+          && isOwner(existing().ownerId)
+          && get(/databases/$(database)/documents/inspections/$(inspectionId)).data.ownerId == request.auth.uid;
+      }
+    }
+
+    // Custom inspection standards
+    match /standards/{standardId} {
+      allow get: if isValidId(standardId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(standardId)
+        && isValidInspectionStandard(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(standardId)
+        && isOwner(existing().ownerId)
+        && isValidInspectionStandard(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'domainProfile', 'toleranceStandard', 'passThreshold', 'defectFocus', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(standardId) && isOwner(existing().ownerId);
+    }
+  }
+}

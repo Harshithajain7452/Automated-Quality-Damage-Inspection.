@@ -1,0 +1,6 @@
+{
+  "name": "VeriSpec — Automated Quality & Damage Inspection",
+  "description": "Automated visual quality control, surface defect detection, and damage inspection workbench with bounding-box diagnostics and audit ledger.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
