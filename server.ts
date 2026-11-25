@@ -367,7 +367,7 @@ async function createApp() {
   } else {
     const distDir = path.resolve(__dirname, 'dist');
     app.use(express.static(distDir));
-    app.get('/{*splat}', (_req: Request, res: Response) => {
+    app.get('*', (req: Request, res: Response) => {
       const indexHtml = path.join(distDir, 'index.html');
       if (fs.existsSync(indexHtml)) {
         res.sendFile(indexHtml);
